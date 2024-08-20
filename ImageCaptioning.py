@@ -57,3 +57,23 @@ dataloader = DataLoader(dataset, batch_size=32, shuffle=True, num_workers=4)
 # Sample a batch
 images, captions = next(iter(dataloader))
 print(images.shape, len(captions))
+
+import torch.nn as nn
+import torchvision.models as models
+
+# Load a pre-trained ResNet50 model
+resnet = models.resnet50(pretrained=True)
+
+# Remove the last fully connected layer
+resnet = nn.Sequential(*list(resnet.children())[:-1])
+
+# Freeze the parameters
+for param in resnet.parameters():
+    param.requires_grad = False
+
+# Example of extracting features
+sample_image = images[0].unsqueeze(0)  # Taking the first image from the batch
+with torch.no_grad():
+    feature_vector = resnet(sample_image)
+
+print(feature_vector.shape)  # Should be [1, 2048, 1, 1] or similar depending on architecture
