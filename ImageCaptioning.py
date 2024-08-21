@@ -201,3 +201,52 @@ for epoch in range(10):
             print(f"Epoch {epoch + 1}, Step {i}, Loss: {loss.item():.4f}")
 
     print(f"Epoch {epoch + 1}, Loss: {epoch_loss / len(dataloader):.4f}")
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+def generate_caption(image, encoder, decoder, vocab, max_len=20):
+    encoder.eval()
+    decoder.eval()
+    
+    with torch.no_grad():
+        features = encoder(image.unsqueeze(0))
+        h, c = decoder.init_hidden_state(features)
+        
+        caption = []
+        alpha_list = []
+        
+        for _ in range(max_len):
+            attention_weighted_encoding, alpha = decoder.attention(features, h)
+            h, c = decoder.decode_step(attention_weighted_encoding, (h, c))
+            preds = decoder.fc(h)
+            word_id = preds.argmax(1).item()
+            word = vocab[word_id]
+            caption.append(word)
+            alpha_list.append(alpha.cpu().numpy())
+            
+            if word == "<end>":
+                break
+        
+        return caption, alpha_list
+
+# Example usage
+sample_image = images[0].to(device)
+caption, attention_weights = generate_caption(sample_image, encoder, decoder, vocab={0: '<start>', 1: 'a', 2: 'cat', 3: '<end>'})
+
+# Visualize the attention maps
+def visualize_attention(image, caption, attention_weights):
+    fig = plt.figure(figsize=(15, 15))
+    for idx, word in enumerate(caption):
+        if idx == len(attention_weights):
+            break
+        ax = fig.add_subplot(len(caption) // 5 + 1, 5, idx + 1)
+        ax.set_title(word)
+        attention_map = attention_weights[idx].reshape(7, 7)
+        ax.imshow(image.permute(1, 2, 0).cpu().numpy())
+        ax.imshow(attention_map, alpha=0.6, extent=(0, 224, 224, 0), interpolation='bilinear', cmap='gray')
+        plt.axis('off')
+
+# Visualizing the attention for a generated caption
+visualize_attention(sample_image, caption, attention_weights)
+plt.show()
