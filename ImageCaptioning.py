@@ -77,3 +77,24 @@ with torch.no_grad():
     feature_vector = resnet(sample_image)
 
 print(feature_vector.shape)  # Should be [1, 2048, 1, 1] or similar depending on architecture
+
+class Encoder(nn.Module):
+    def __init__(self, embed_size):
+        super(Encoder, self).__init__()
+        self.resnet = resnet
+        self.fc = nn.Linear(resnet.fc.in_features, embed_size)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(0.5)
+    
+    def forward(self, images):
+        features = self.resnet(images)
+        features = features.view(features.size(0), -1)
+        features = self.fc(features)
+        features = self.relu(features)
+        features = self.dropout(features)
+        return features
+
+# Initialize the encoder
+encoder = Encoder(embed_size=256)
+sample_features = encoder(sample_image)
+print(sample_features.shape)  # Should be [1, 256]
