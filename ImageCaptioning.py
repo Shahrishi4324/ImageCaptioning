@@ -116,3 +116,55 @@ class Attention(nn.Module):
         attention_weighted_encoding = (encoder_out * alpha.unsqueeze(2)).sum(dim=1)
 
         return attention_weighted_encoding, alpha
+
+class DecoderWithAttention(nn.Module):
+    def __init__(self, embed_size, hidden_size, vocab_size, attention_dim, encoder_dim, decoder_dim, dropout=0.5):
+        super(DecoderWithAttention, self).__init__()
+        self.attention = Attention(encoder_dim, decoder_dim, attention_dim)
+        self.embedding = nn.Embedding(vocab_size, embed_size)
+        self.dropout = nn.Dropout(p=dropout)
+        self.decode_step = nn.LSTMCell(embed_size + encoder_dim, hidden_size, bias=True)
+        self.init_h = nn.Linear(encoder_dim, hidden_size)
+        self.init_c = nn.Linear(encoder_dim, hidden_size)
+        self.f_beta = nn.Linear(hidden_size, encoder_dim)
+        self.sigmoid = nn.Sigmoid()
+        self.fc = nn.Linear(hidden_size, vocab_size)
+        self.init_weights()
+
+    def init_weights(self):
+        self.embedding.weight.data.uniform_(-0.1, 0.1)
+        self.fc.bias.data.fill_(0)
+        self.fc.weight.data.uniform_(-0.1, 0.1)
+
+    def forward(self, features, captions):
+        batch_size = features.size(0)
+        vocab_size = self.vocab_size
+        caption_lengths = [len(caption) for caption in captions]
+
+        embeddings = self.embedding(captions)
+
+        h, c = self.init_hidden_state(features)
+
+        decode_lengths = [length - 1 for length in caption_lengths]
+
+        predictions = torch.zeros(batch_size, max(decode_lengths), vocab_size).to(features.device)
+
+        for t in range(max(decode_lengths)):
+            batch_size_t = sum([l > t for l in decode_lengths])
+            attention_weighted_encoding, alpha = self.attention(features[:batch_size_t], h[:batch_size_t])
+            gate = self.sigmoid(self.f_beta(h[:batch_size_t]))
+            attention_weighted_encoding = gate * attention_weighted_encoding
+            h, c = self.decode_step(torch.cat([embeddings[:batch_size_t, t, :], attention_weighted_encoding], dim=1), (h[:batch_size_t], c[:batch_size_t]))
+            preds = self.fc(self.dropout(h))
+            predictions[:batch_size_t, t, :] = preds
+
+        return predictions
+
+    def init_hidden_state(self, encoder_out):
+        mean_encoder_out = encoder_out.mean(dim=1)
+        h = self.init_h(mean_encoder_out)
+        c = self.init_c(mean_encoder_out)
+        return h, c
+
+# Initialize the decoder
+decoder = DecoderWithAttention(embed_size=256, hidden_size=512, vocab_size=5000, attention_dim=256, encoder_dim=2048, decoder_dim=512)
