@@ -168,3 +168,36 @@ class DecoderWithAttention(nn.Module):
 
 # Initialize the decoder
 decoder = DecoderWithAttention(embed_size=256, hidden_size=512, vocab_size=5000, attention_dim=256, encoder_dim=2048, decoder_dim=512)
+
+import torch.optim as optim
+
+# Define the loss function and optimizer
+criterion = nn.CrossEntropyLoss(ignore_index=0)
+optimizer = optim.Adam(list(decoder.parameters()) + list(encoder.parameters()), lr=1e-4)
+
+# Training loop
+for epoch in range(10):
+    encoder.train()
+    decoder.train()
+    epoch_loss = 0
+    
+    for i, (images, captions) in enumerate(dataloader):
+        images = images.to(device)
+        captions = captions.to(device)
+
+        optimizer.zero_grad()
+        
+        features = encoder(images)
+        outputs = decoder(features, captions)
+
+        targets = captions[:, 1:]  # Ignore the <start> token
+        loss = criterion(outputs.view(-1, outputs.shape[-1]), targets.contiguous().view(-1))
+        loss.backward()
+        optimizer.step()
+
+        epoch_loss += loss.item()
+
+        if i % 10 == 0:
+            print(f"Epoch {epoch + 1}, Step {i}, Loss: {loss.item():.4f}")
+
+    print(f"Epoch {epoch + 1}, Loss: {epoch_loss / len(dataloader):.4f}")
